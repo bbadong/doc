@@ -1,0 +1,84 @@
+root@siege:/# siege -c30 -t120S -r10 --content-type "application/json" 'http://a1d2c9dde6e714ebbb3aeb2077129eae-464698229.ap-northeast-2.elb.amazonaws.com:8080/reservations POST {"customerName": "park"}'
+[error] CONFIG conflict: selected time and repetition based testing
+defaulting to time-based testing: 120 seconds
+** SIEGE 4.0.4
+** Preparing 30 concurrent users for battle.
+The server is now under siege...
+Lifting the server siege...
+Transactions:                   2050 hits
+Availability:                  77.71 %
+Elapsed time:                 119.08 secs
+Data transferred:               0.84 MB
+Response time:                  1.73 secs
+Transaction rate:              17.22 trans/sec
+Throughput:                     0.01 MB/sec
+Concurrency:                   29.81
+Successful transactions:        2050
+Failed transactions:             588
+Longest transaction:            3.49
+Shortest transaction:           0.02
+
+root@httpie:/# http POST http://a1d2c9dde6e714ebbb3aeb2077129eae-464698229.ap-northeast-2.elb.amazonaws.com:8080/reservations customerName="kang"
+HTTP/1.1 201 Created
+Content-Type: application/json;charset=UTF-8
+Date: Tue, 04 Aug 2020 11:51:41 GMT
+Location: http://reservation:8080/reservations/1994
+transfer-encoding: chunked
+
+{
+    "_links": {
+        "reservation": {
+            "href": "http://reservation:8080/reservations/1994"
+        },
+        "self": {
+            "href": "http://reservation:8080/reservations/1994"
+        }
+    },
+    "checkinDate": null,
+    "customerName": "kang",
+    "hotelId": null,
+    "nights": null,
+    "price": null,
+    "status": "Reservation Request",
+    "updateGubun": null
+}
+
+root@httpie:/# http POST http://a1d2c9dde6e714ebbb3aeb2077129eae-464698229.ap-northeast-2.elb.amazonaws.com:8080/reservations customerName="kang"
+HTTP/1.1 500 Internal Server Error
+Content-Type: application/json;charset=UTF-8
+Date: Tue, 04 Aug 2020 11:51:42 GMT
+transfer-encoding: chunked
+
+{
+    "error": "Internal Server Error",
+    "message": "Could not commit JPA transaction; nested exception is javax.persistence.RollbackException: Error while committing the transaction",
+    "path": "/reservations",
+    "status": 500,
+    "timestamp": "2020-08-04T11:51:43.070+0000"
+}
+
+root@httpie:/# http POST http://a1d2c9dde6e714ebbb3aeb2077129eae-464698229.ap-northeast-2.elb.amazonaws.com:8080/reservations customerName="kang"
+HTTP/1.1 201 Created
+Content-Type: application/json;charset=UTF-8
+Date: Tue, 04 Aug 2020 11:51:45 GMT
+Location: http://reservation:8080/reservations/2087
+transfer-encoding: chunked
+
+{
+    "_links": {
+        "reservation": {
+            "href": "http://reservation:8080/reservations/2087"
+        },
+        "self": {
+            "href": "http://reservation:8080/reservations/2087"
+        }
+    },
+    "checkinDate": null,
+    "customerName": "kang",
+    "hotelId": null,
+    "nights": null,
+    "price": null,
+    "status": "Reservation Request",
+    "updateGubun": null
+}
+
