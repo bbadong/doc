@@ -1,0 +1,161 @@
+AWS 교육 계정
+	계정 별칭: kcloud-academy
+	사용자: SkccTeam6, 
+	리전: ap-northeast-2 아시아 태평양(서울)
+
+aws 설정
+	aws configure
+
+
+EKS 클러스터 생성
+	eksctl create cluster --name SkccTeam6 --version 1.15 --nodegroup-name standard-workers --node-type t3.medium --nodes 4 --nodes-min 1 --nodes-max 4
+
+ECR Login @ubuntu
+    aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com
+
+ECR repository create(콘솔에서 UI로 생성)
+	aws ecr create-repository --repository-name reservation --region ap-northeast-2
+	aws ecr create-repository --repository-name payment --region ap-northeast-2
+	aws ecr create-repository --repository-name reservationmanagement --region ap-northeast-2
+	aws ecr create-repository --repository-name gateway --region ap-northeast-2
+
+git repository create & push
+	git init
+	git add .
+	git commit -m "메시지"
+	git remote add origin {github 경로}
+	git push -u origin master
+
+git repository cloning
+	git clone {github 경로}
+
+Project build
+	mvn clean
+	mvn package -Dmaven.test.skip=true
+
+Dockerizing
+	docker build -t 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/reservation:v1 .
+	docker build -t 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/payment:v1 .
+	docker build -t 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/management:v1 .
+	docker build -t 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/gateway:v1 .
+
+Docker image push
+	docker push 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/reservation:v1
+	docker push 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/payment:v1
+	docker push 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/management:v1
+	docker push 496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/gateway:v1
+	
+	
+	
+	kubectl create deploy reservation --image=496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/reservation:v1
+	kubectl create deploy payment --image=496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/payment:v1
+	kubectl create deploy management --image=496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/management:v1
+	kubectl create deploy gateway --image=496278789073.dkr.ecr.ap-northeast-2.amazonaws.com/gateway:v1
+	
+	kubectl expose deploy reservation --type=ClusterIP --port=8080
+	kubectl expose deploy payment --type=ClusterIP --port=8080
+	kubectl expose deploy management --type=ClusterIP --port=8080
+	kubectl expose deploy gateway --type=LoadBalancer --port=8080
+
+
+
+	
+클러스터에 Kafka 서비스 설치
+	curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash
+	kubectl --namespace kube-system create sa tiller      # helm 의 설치관리자를 위한 시스템 사용자 생성
+	kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
+	helm init --service-account tiller
+	kubectl patch deploy --namespace kube-system tiller-deploy -p '{"spec":{"template":{"spec":{"serviceAccount":"tiller"}}}}'
+	helm repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
+	helm repo update
+	helm install --name my-kafka --namespace kafka incubator/kafka
+
+클러스터에 Istio 서비스 설치
+	curl -L https://git.io/getLatestIstio | ISTIO_VERSION=1.4.5 sh -
+	cd istio-1.4.5
+	export PATH=$PWD/bin:$PATH:/usr/local:/usr/local/bin
+	for i in install/kubernetes/helm/istio-init/files/crd*yaml; do kubectl apply -f $i; done
+	kubectl apply -f install/kubernetes/istio-demo.yaml
+	kubectl get pod -n istio-system
+	
+Istio 활성화
+	방법 1. yaml 파일 주입
+		kubectl apply -f <(istioctl kube-inject -f Deployment.yml) -n istio-test-ns
+	방법 2. Namespace 활성화
+		kubectl create namespace istio-cb-ns
+		kubectl label namespace istio-cb-ns istio-injection=enabled
+
+Kubernetes 서비스 올리기
+	kubernetes/deployment.yml 파일 수정
+		nano deployment.yml
+			metadata:namespace: istio-cb-ns
+			spec:template:spec:containers:-name: order image: {ECR 이미지 이름}:{이미지 태그}
+	kubernetes/service.yaml 파일 수정
+		nano service.yaml
+			metadata:namespace: istio-cb-ns
+	yml 파일로 서비스 생성
+		kubectl create -f deployment.yml
+		kubectl create -f service.yml
+	서비스 생성 로그 확인
+		kubectl get all -n istio-cb-ns
+		kubectl logs order-c6544b55b-q8bkm -n istio-cb-ns -c order
+		kubectl logs delivery-65768bb48d-c9vls -n istio-cb-ns -c delivery
+		kubectl logs mypage-699b6d466f-vr9ht -n istio-cb-ns -c mypage
+		
+클러스터 내 kafka 토픽 생성 및 이벤트 수신
+#	kubectl -n kafka exec my-kafka-0 -- /usr/bin/kafka-topics --zookeeper my-kafka-zookeeper:2181 --topic hrs --create --partitions 1 --replication-factor 1
+	kubectl -n kafka exec -ti my-kafka-0 -- /usr/bin/kafka-console-consumer --bootstrap-server my-kafka:9092 --topic hrs --from-beginning
+
+클러스터 내 httpie를 활용한 테스트 수행
+
+    cat <<EOF | kubectl apply -f -
+    apiVersion: "v1"
+    kind: "Pod"
+    metadata: 
+      name: httpie
+      labels: 
+        name: httpie
+    spec: 
+      containers: 
+        - name: httpie
+          image: clue/httpie
+          command:
+            - sleep
+            - "360000"
+    EOF
+
+    httpie 실행
+	kubectl exec -it pod/httpie -c httpie -- /bin/bash
+	
+클러스터 내 siege 활용한 테스트 수행
+    kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: siege
+    spec:
+      containers:
+      - name: siege
+        image: apexacme/siege-nginx
+    EOF
+
+    siege 실행
+    kubectl exec -it siege --container siege -- /bin/bash
+
+Gateway 만들기
+	생성
+		kubectl create deploy cna-gateway --image=052937454741.dkr.ecr.ap-northeast-2.amazonaws.com/user15-cna-gateway:v1 -n istio-cb-ns
+	노출
+		kubectl expose deploy cna-gateway --type=LoadBalancer --port=8080 -n istio-cb-ns
+	테스트(by httpie)
+		kubectl get all -n istio-cb-ns
+			-> 여기서 노출한 External-IP를 복사
+		http POST http://a1d2c9dde6e714ebbb3aeb2077129eae-464698229.ap-northeast-2.elb.amazonaws.com:8080/reservations customerName="park"
+
+Final assessment Tip
+	1. 고 가용성을 위한 Readiness, Liveness 프로브 추가
+		- kuberneted > deployment.yml > readinessProbe, livenessProbe 설정 추가할 것
+		- livenessProbe: httpGet:
+			path: 'actuator/health'
+			port: 8080
+			
